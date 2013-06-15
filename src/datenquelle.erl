@@ -22,5 +22,6 @@ datenquelle_start() ->
 datenquelle_loop() ->
 	receive
 		{sendeNutzdaten, Station} ->
-			Station ! "012345678901234567890123"
-	end.
+			Station ! {nutzdaten, "012345678901234567890123"}
+	end,
+	datenquelle_loop().
