@@ -22,6 +22,6 @@ datensenke_start() ->
 datensenke_loop() ->
 	receive
 		{log, Log} ->
-			logging("datensenke.log",Log),
+			logging("datensenke.log",io_lib:format("~s~n",[Log])),
 			datensenke_loop()
 	end.

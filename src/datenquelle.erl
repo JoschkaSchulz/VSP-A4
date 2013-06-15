@@ -7,7 +7,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([]).
+-export([datenquelle_start/0]).
 
 
 
@@ -22,5 +22,5 @@ datenquelle_start() ->
 datenquelle_loop() ->
 	receive
 		{sendeNutzdaten, Station} ->
-			ok
+			Station ! "012345678901234567890123"
 	end.
