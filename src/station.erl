@@ -11,7 +11,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([start/5,init/1,handle_call/3,terminate/2,handle_cast/2,code_change/3,handle_info/2]).
+-export([start/1,init/1,handle_call/3,terminate/2,handle_cast/2,code_change/3,handle_info/2]).
 
 
 %% ====================================================================
@@ -19,7 +19,24 @@
 %% ====================================================================
 
 %% Startet Sender und Listener
-start(MultiIP, IP, Port, Stationsklasse, Zeitverschiebung) ->
+start([InterfaceName, MulticastIPAtom, PortAtom, StationsklasseAtom, ZeitverschiebungAtom]) ->
+	{ok,MultiIP} = inet_parse:address(atom_to_list(MulticastIPAtom)),
+	%{ok,IP} = inet_parse:address(atom_to_list(IPAtom)),
+	{Port,_Unused} = string:to_integer(atom_to_list(PortAtom)),
+	Stationsklasse = atom_to_list(StationsklasseAtom),
+	{Zeitverschiebung,_Unused} = string:to_integer(atom_to_list(ZeitverschiebungAtom)),
+	io:format("~n++--------------------------------------------------~n", []),
+	io:format("++ Starte Station mit Parameter:~n++~n", []),
+	io:format("++ Multicast IP    : ~p~n", [MultiIP]),
+	%io:format("++ IP              : ~p~n", [IP]),
+	io:format("++ Listen Port     : ~p~n", [Port]),
+	io:format("++ Stationsklasse  : ~p~n", [Stationsklasse]),
+	io:format("++ Zeitverschiebung: ~p~n", [Zeitverschiebung]),
+	io:format("++--------------------------------------------------~n", []),
+	
+	%IP Debug muss entfernt werden
+	IP = {127,0,0,1},
+	
 	gen_server:start_link({local, ?MODULE}, ?MODULE, [MultiIP, IP, Port, Stationsklasse, Zeitverschiebung], []).
 
 init([MultiIP, IP, Port, Stationsklasse, Zeitverschiebung]) ->
@@ -216,7 +233,7 @@ createDatapackage(Slotnummer, DatenquellePID) ->
 %% 		{nutzdaten, Nutzdaten} ->
 %% 			io:format("Nutzdaten angekommen")
 %% 	end,
-	Nutzdaten = list_to_binary("abcdefghijklmnopabcdefgh"),
+	Nutzdaten = io:get_chars("", 24),
 	StationsklassenByte = list_to_bitstring(gen_server:call(?MODULE, {get_station_class})),
 	Timestamp = current_millis(),
 	<<Nutzdaten:24/binary, StationsklassenByte:8/bitstring, Slotnummer:8/integer, Timestamp:64 / integer - big>>.
