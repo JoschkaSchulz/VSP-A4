@@ -41,13 +41,14 @@ teamNo="7"
 # Example:    dataSource="~/somewhere/DataSource"
 #         or  dataSource="java -cp . datasource.DataSource"
 ########################################################################################################
-dataSource="~ DataSource"
+dataSource="./DataSource "
 
 ########################################################################################################
 # TODO: Enter your station's start command.
 #       N.B.: You MUST use the variables above as parameters!
 #
 # Example: stationCmd="java aufgabe4.MyStation $interfaceName $mcastAddress $receivePort $stationClass"
+#			for testing: erl -noshell -s station start eth0 225.10.1.2 15007 A 0
 ########################################################################################################
 stationCmd="erl -noshell -s station start $interfaceName $mcastAddress $receivePort $stationClass 0"
 

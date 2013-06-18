@@ -21,29 +21,26 @@
 %% Startet Sender und Listener
 start([InterfaceName, MulticastIPAtom, PortAtom, StationsklasseAtom, ZeitverschiebungAtom]) ->
 	{ok,MultiIP} = inet_parse:address(atom_to_list(MulticastIPAtom)),
-	%{ok,IP} = inet_parse:address(atom_to_list(IPAtom)),
+	{ok,Interface} = inet_parse:address(atom_to_list(InterfaceName)),
 	{Port,_Unused} = string:to_integer(atom_to_list(PortAtom)),
 	Stationsklasse = atom_to_list(StationsklasseAtom),
 	{Zeitverschiebung,_Unused} = string:to_integer(atom_to_list(ZeitverschiebungAtom)),
 	io:format("~n++--------------------------------------------------~n", []),
 	io:format("++ Starte Station mit Parameter:~n++~n", []),
 	io:format("++ Multicast IP    : ~p~n", [MultiIP]),
-	%io:format("++ IP              : ~p~n", [IP]),
+	io:format("++ Interface		  : ~p~n", [Interface]),
 	io:format("++ Listen Port     : ~p~n", [Port]),
 	io:format("++ Stationsklasse  : ~p~n", [Stationsklasse]),
 	io:format("++ Zeitverschiebung: ~p~n", [Zeitverschiebung]),
-	io:format("++--------------------------------------------------~n", []),
+	io:format("++----------------------------------------------------~n", []),
 	
-	%IP Debug muss entfernt werden
-	IP = {127,0,0,1},
-	
-	gen_server:start_link({local, ?MODULE}, ?MODULE, [MultiIP, IP, Port, Stationsklasse, Zeitverschiebung], []).
+	gen_server:start_link({local, ?MODULE}, ?MODULE, [MultiIP, Interface, Port, Stationsklasse, Zeitverschiebung], []).
 
-init([MultiIP, IP, Port, Stationsklasse, Zeitverschiebung]) ->
+init([MultiIP, Interface, Port, Stationsklasse, Zeitverschiebung]) ->
 	StateDict = dict:store(current_frame, 0, dict:store(time_deviation, 0, dict:store(time_shift, Zeitverschiebung, dict:store(station_class, Stationsklasse, dict:store(next_slot, 0, dict:store(free_slots, [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24], dict:new())))))),
 	DatensenkePID = spawn(fun() -> datensenke_start() end),
  	DatenquellePID = spawn(fun() -> datenquelle_start() end),
- 	spawn(fun() -> listener_start(IP,Port,MultiIP,DatensenkePID) end),	
+ 	spawn(fun() -> listener_start(Interface,Port,MultiIP,DatensenkePID) end),	
  	spawn(fun() -> sender_start(MultiIP,Port,DatensenkePID, DatenquellePID) end),
 	{ok,StateDict}.
 
@@ -75,7 +72,6 @@ listener_loop(Socket,DatensenkePID) ->
 	% empfange neues Paket
 	case gen_udp:recv(Socket, 0) of
 		{ok, {_Address, _Port, Packet}} ->
-			io:format("~n~nPacket: ~p~n~n",[Packet]),
 			 <<_StationName:10/binary,_Data:14/binary,
 			   Station:8/bitstring,Slot:8/integer,Sendezeit:64 / integer - big>> = Packet,
  			
@@ -100,7 +96,7 @@ listener_loop(Socket,DatensenkePID) ->
 			case SendezeitFrame > Frame of
 				true ->
 				  	gen_server:call(?MODULE, {set_current_frame, SendezeitFrame}),
-					gen_server:call(?MODULE, {reset_slots});	
+					gen_server:call(?MODULE, {reset_slots});
 				false ->					
 					ok
 			end,
@@ -169,7 +165,7 @@ sync_time(Stationsklasse, Sendezeit, Ankunftszeit) ->
 sender_start(MultiIP,Port,DatensenkePID, DatenquellePID) ->
 	Socket = get_socket(sender,Port,MultiIP),
 	gen_udp:controlling_process(Socket, self()),
-	logging("listener_log.log", io:format("Der Sender ist gestartet!", [])),			
+	logging("listener_log.log", io:format("Der Sender ist gestartet!~n", [])),			
 	sender_loop(MultiIP,Port,Socket, DatensenkePID, DatenquellePID,-1),
 	ok.
 
@@ -197,7 +193,10 @@ sender_loop(MultiIP,Port,Socket,DatensenkePID, DatenquellePID,OldSlot) ->
 			% hole den reservierten Slot aus dem Dictionary
 			case OldSlot == -1 of
 				true ->	
-					Slot = gen_server:call(?MODULE, {get_next_slot});
+					Slot = gen_server:call(?MODULE, {get_next_slot}),
+					random:seed(now()),
+					RandomSlot = random:uniform(25)-1,
+					gen_server:call(?MODULE, {set_next_slot, RandomSlot});
 				false ->
 					Slot = OldSlot
 			end,
@@ -233,10 +232,15 @@ createDatapackage(Slotnummer, DatenquellePID) ->
 %% 		{nutzdaten, Nutzdaten} ->
 %% 			io:format("Nutzdaten angekommen")
 %% 	end,
-	Nutzdaten = io:get_chars("", 24),
-	StationsklassenByte = list_to_bitstring(gen_server:call(?MODULE, {get_station_class})),
-	Timestamp = current_millis(),
-	<<Nutzdaten:24/binary, StationsklassenByte:8/bitstring, Slotnummer:8/integer, Timestamp:64 / integer - big>>.
+	Nutzdaten = list_to_binary(io:get_chars("", 24)),
+	case Nutzdaten == "" of
+		true ->
+			createDatapackage(Slotnummer, DatenquellePID);
+		false ->
+			StationsklassenByte = list_to_bitstring(gen_server:call(?MODULE, {get_station_class})),
+			Timestamp = current_millis(),
+			<<Nutzdaten:24/binary, StationsklassenByte:8/bitstring, Slotnummer:8/integer, Timestamp:64 / integer - big>>
+	end.
 
 %% Aktuelle "Uhrzeit" in Millisekunden (mit Zeitverschiebung und -abweichung)
 current_millis() ->
