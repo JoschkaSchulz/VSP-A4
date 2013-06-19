@@ -50,7 +50,7 @@ dataSource="./DataSource "
 # Example: stationCmd="java aufgabe4.MyStation $interfaceName $mcastAddress $receivePort $stationClass"
 #			for testing: erl -noshell -s station start eth0 225.10.1.2 15007 A 0
 ########################################################################################################
-stationCmd="erl -noshell -s station start $interfaceName $mcastAddress $receivePort $stationClass 0"
+stationCmd="erl -noshell -s station start $interfaceName $mcastAddress $receivePort $stationClass $UTCoffsetMs"
 
 
 printUsage() {

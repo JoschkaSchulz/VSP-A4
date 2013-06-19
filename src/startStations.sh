@@ -71,6 +71,8 @@ then
 			then
 				for i in `seq $firstIndex $lastIndex`
 				do
+					#kurze Startverzögerung damit die Zufallswerte besser klappen
+					sleep 1
 					# Launching data source and station.
 					$dataSource $teamNo $i | $stationCmd &
 					#

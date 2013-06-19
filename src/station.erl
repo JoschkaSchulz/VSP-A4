@@ -81,7 +81,7 @@ listener_loop(Socket,DatensenkePID, LastArrivedSlot, LastReservedSlot) ->
 			Ankunftsslot = trunc((Ankunftszeit rem 1000) / 40),
 %% 			
 %% 			%%Datensenke speichere die Nachricht
-			DatensenkePID ! {log, Packet},
+			DatensenkePID ! {log, Packet, io_lib:format("datensenke.log",[])},
 			
 			Stationsklasse = gen_server:call(?MODULE, {get_station_class}),
 			
@@ -217,17 +217,25 @@ sender_loop(MultiIP,Port,Socket,DatensenkePID, DatenquellePID,OldSlot) ->
 			% lege Sender schlafen bis zum korrekten Zeitslot
 			timer:send_after(Slot * 40 +10, senden),
 			receive
-				senden ->					
-					% hole den reservierten Slot aus dem Dictionary
-					NextSlot = gen_server:call(?MODULE, {get_next_slot}),
+				senden ->				
+					% sind wir noch im korrekten Zeitslot oder bereits im nächsten?
+					case (current_millis() rem 1000) < (Slot*40 + 40) of
+						true ->
+						  	% hole den reservierten Slot aus dem Dictionary
+							NextSlot = gen_server:call(?MODULE, {get_next_slot}),
 					
-					% erzeuge ein Datenpaket
-					Datapackage = createDatapackage(NextSlot, DatenquellePID),
+							% erzeuge ein Datenpaket
+							Datapackage = createDatapackage(NextSlot, DatenquellePID),
 					
-					%Sende die Nachricht
-					gen_udp:send(Socket, MultiIP, Port, Datapackage)
-			end,
-			sender_loop(MultiIP,Port,Socket, DatensenkePID, DatenquellePID,NextSlot)
+							%Sende die Nachricht
+							gen_udp:send(Socket, MultiIP, Port, Datapackage),
+					  
+					  		sender_loop(MultiIP,Port,Socket, DatensenkePID, DatenquellePID,NextSlot);
+					  	% wenn Zeitslot überschritten, nichts senden
+						false ->
+							sender_loop(MultiIP,Port,Socket, DatensenkePID, DatenquellePID,-1)
+					end		
+			end	
 	end.
 
 %% ====================================================================
