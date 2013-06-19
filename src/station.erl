@@ -1,3 +1,5 @@
+%% ./startStations.sh 172.16.1.12 225.10.1.2 16000 1 1 A 0  
+
 %% @author abd447
 %% @doc @todo Add description to start.
 
@@ -41,24 +43,24 @@ init([MultiIP, Interface, Port, Stationsklasse, Zeitverschiebung]) ->
 	DatensenkePID = spawn(fun() -> datensenke_start() end),
  	DatenquellePID = spawn(fun() -> datenquelle_start() end),
  	spawn(fun() -> listener_start(Interface,Port,MultiIP,DatensenkePID) end),	
- 	spawn(fun() -> sender_start(MultiIP,Port,DatensenkePID, DatenquellePID) end),
+ 	spawn(fun() -> sender_start(Interface,MultiIP,Port,DatensenkePID, DatenquellePID) end),
 	{ok,StateDict}.
 
 %% ====================================================================
-%% Empfänger
+%% Empfï¿½nger
 %% ====================================================================
 
-%% Startmethode des Listeners, öffnet das UDP-Socket
+%% Startmethode des Listeners, ï¿½ffnet das UDP-Socket
 listener_start(IP,Port,MultiIP,DatensenkePID) ->
 	logging("listener_log.log", io:format("Listener gestartet" ++ "~n",[])),		
 	Socket = get_socket(receiver,Port,IP,MultiIP),
 	%Socket = get_socket(sender,Port,IP),
 	gen_udp:controlling_process(Socket, self()),
-	listener_loop(Socket,DatensenkePID),
+	listener_loop(Socket,DatensenkePID, -1, -1),
 	ok.
 
 %% ====================================================================
-%%	Beispiel: Wie erkennen wir den nächsten Frame?
+%%	Beispiel: Wie erkennen wir den nï¿½chsten Frame?
 %% 
 %%  Startframe: 1025 <--- Zeitangabe "Sekunde" 1025 
 %% 	Aktueller Frame = Startframe
@@ -68,14 +70,15 @@ listener_start(IP,Port,MultiIP,DatensenkePID) ->
 %% ====================================================================
 
 %% Lauschen auf dem Socket
-listener_loop(Socket,DatensenkePID) ->
+listener_loop(Socket,DatensenkePID, LastArrivedSlot, LastReservedSlot) ->
 	% empfange neues Paket
 	case gen_udp:recv(Socket, 0) of
 		{ok, {_Address, _Port, Packet}} ->
 			 <<_StationName:10/binary,_Data:14/binary,
-			   Station:8/bitstring,Slot:8/integer,Sendezeit:64 / integer - big>> = Packet,
- 			
+			   Station:8/bitstring,Slot:8/integer,Sendezeit:64 / integer - big>> = Packet,	
+
 			Ankunftszeit = current_millis(),
+			Ankunftsslot = trunc((Ankunftszeit rem 1000) / 40),
 %% 			
 %% 			%%Datensenke speichere die Nachricht
 			DatensenkePID ! {log, Packet},
@@ -92,7 +95,7 @@ listener_loop(Socket,DatensenkePID) ->
 			Frame = gen_server:call(?MODULE, {get_current_frame}),
 			SendezeitFrame = trunc(Sendezeit/1000),
 			
-			% Wurde das Paket im nächsten Frame gesendet?
+			% Wurde das Paket im nï¿½chsten Frame gesendet?
 			case SendezeitFrame > Frame of
 				true ->
 				  	gen_server:call(?MODULE, {set_current_frame, SendezeitFrame}),
@@ -101,27 +104,37 @@ listener_loop(Socket,DatensenkePID) ->
 					ok
 			end,
 			
-			% Slot aus der Liste der freien Slots entfernen
-			gen_server:call(?MODULE, {remove_slot, Slot}),	
-			ReservedSlot = gen_server:call(?MODULE, {get_next_slot}),
+			% Kollisionskontrolle
+			case LastArrivedSlot == Ankunftsslot of
+			true ->
+				% Bei Kollision Slots wieder freigeben
+				gen_server:call(?MODULE, {add_slot, LastReservedSlot});
+			false ->
+				% Slot aus der Liste der freien Slots entfernen
+				gen_server:call(?MODULE, {remove_slot, Slot}),	
+
+				ReservedSlot = gen_server:call(?MODULE, {get_next_slot}),
 					
-			% ggf. neuen Slot wählen (zum Reservieren)
-			case ReservedSlot == Slot of
-			  	true ->
-					% suche den Slot zufällig aus
-				  	RandomSlot = randomElem(gen_server:call(?MODULE, {get_slotlist})),
-					gen_server:call(?MODULE, {set_next_slot, RandomSlot});
-				false ->
-				  	ok
-			end;
+				% ggf. neuen Slot wï¿½hlen (zum Reservieren)
+				case ReservedSlot == Slot of
+					true ->
+						% suche den Slot zufï¿½llig aus
+				  		RandomSlot = randomElem(gen_server:call(?MODULE, {get_slotlist})),
+						gen_server:call(?MODULE, {set_next_slot, RandomSlot});
+					false ->
+				  		ok
+				end
+			end,
+
+			listener_loop(Socket, DatensenkePID, Ankunftsslot, Slot);
+			
 		{error, Reason} ->
 			logging("listener_log.log", io:format("Fehler: ~p", [Reason])),
 			error
-	end,
-	listener_loop(Socket, DatensenkePID).
+	end.
 
 %% ====================================================================
-%% Beispiel: Zeitsynchronisation
+%% Beispiel: Zeitsynchronisation X ! {tellmi
 %% 
 %% Beispiel der Synchronisation von Station B auf Station A: 
 %%
@@ -161,16 +174,16 @@ sync_time(Stationsklasse, Sendezeit, Ankunftszeit) ->
 %% Sender
 %% ====================================================================
 
-%% Startmethode des Senders, öffnet das UDP-Socket
-sender_start(MultiIP,Port,DatensenkePID, DatenquellePID) ->
-	Socket = get_socket(sender,Port,MultiIP),
+%% Startmethode des Senders, ï¿½ffnet das UDP-Socket
+sender_start(Interface,MultiIP,Port,DatensenkePID, DatenquellePID) ->
+	Socket = get_socket(sender,Port,Interface),
 	gen_udp:controlling_process(Socket, self()),
 	logging("listener_log.log", io:format("Der Sender ist gestartet!~n", [])),			
 	sender_loop(MultiIP,Port,Socket, DatensenkePID, DatenquellePID,-1),
 	ok.
 
 %% ====================================================================
-%% Beispiel: Wie viele Millisekunden sind es bis zum nächsten Frame?
+%% Beispiel: Wie viele Millisekunden sind es bis zum nï¿½chsten Frame?
 %% 
 %% Aktuelle Zeit: 1025465
 %% Aktueller Frame: 1000 * trunc(1025465/1000) = 1000 * 1025 = 1025000 
@@ -202,7 +215,7 @@ sender_loop(MultiIP,Port,Socket,DatensenkePID, DatenquellePID,OldSlot) ->
 			end,
 			
 			% lege Sender schlafen bis zum korrekten Zeitslot
-			timer:send_after(Slot * 40 + 10, senden),
+			timer:send_after(Slot * 40 +10, senden),
 			receive
 				senden ->					
 					% hole den reservierten Slot aus dem Dictionary
@@ -221,9 +234,9 @@ sender_loop(MultiIP,Port,Socket,DatensenkePID, DatenquellePID,OldSlot) ->
 %% Erstellt ein Datenpaket
 %%
 %%	Nutzdaten(1)	=>	Byte 0-9: Nutzdaten: Name der sendenden Station
-%%	Nutzdaten(2)  	=>	Byte 10-23: Reserviert für weitere Nutzdaten
+%%	Nutzdaten(2)  	=>	Byte 10-23: Reserviert fï¿½r weitere Nutzdaten
 %%	Stationsklasse 	=>	Byte 24: Stationsklasse (A oder B)
-%%	SlotNummer		=>	Byte 25: Nummer des Slots, in dem die Station im nächsten Frame senden wird
+%%	SlotNummer		=>	Byte 25: Nummer des Slots, in dem die Station im nï¿½chsten Frame senden wird
 %%	Timestamp		=>	Zeitpunkt, zu dem dieses Paket gesendet wurde. Einheit: Millisekunden seit dem 1.1.1970 als 8-Byte Integer, Big Endian
 %% ====================================================================
 createDatapackage(Slotnummer, DatenquellePID) ->
@@ -259,7 +272,17 @@ current_millis() ->
 handle_call({remove_slot,Number},_From,Dict) ->
 	{reply, ok, dict:store(free_slots, dict:fetch(free_slots, Dict) -- [Number], dict:erase(free_slots,Dict))};
 
-% Setzt die Liste der freien Slots auf seinen Standard zurück
+% fÃ¼gt einen freien Slot hinzu
+handle_call({add_slot,Number},_From,Dict) ->
+	Liste = dict:fetch(free_slots, Dict),
+	case lists:member(Number, Liste) of
+		true ->
+			{reply, ok, Dict};
+		false ->
+			{reply, ok, dict:store(free_slots, Liste ++ [Number], Dict)}
+	end;
+
+% Setzt die Liste der freien Slots auf seinen Standard zurï¿½ck
 handle_call({reset_slots},_From,Dict) ->
 	{reply, ok, dict:store(free_slots, [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24], dict:erase(free_slots,Dict))};
 

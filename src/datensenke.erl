@@ -22,6 +22,7 @@ datensenke_start() ->
 datensenke_loop() ->
 	receive
 		{log, Log} ->
-			logging("datensenke.log",io_lib:format("~s~n",[Log])),
+			%%logging("datensenke.log",io_lib:format("~s~n",[Log])),
+			file:write_file("datensenke.log",io_lib:format("~s~n",[Log]),[append]),
 			datensenke_loop()
 	end.

@@ -13,24 +13,24 @@
 %% Internal functions
 %% ====================================================================
 
-%% Öffnet ein UDP-Socket mit IP + Port
+%% ï¿½ffnet ein UDP-Socket mit IP + Port
 get_socket(sender,Port,IP)->
-    {ok,Socket} = gen_udp:open(Port, [binary, {active, false}, {reuseaddr, true}, {ip, IP}, inet, {multicast_loop, false}, {multicast_if, IP}]),
+    {ok,Socket} = gen_udp:open(Port, [binary, {active, false}, {reuseaddr, true}, {ip, IP}, inet, {multicast_loop, true}, {multicast_ttl, 1}, {multicast_if, IP}]),
     Socket.
 
-%% Öffnet ein UDP-Socket mit MultiIP + Port und trägt IP in MultiIP ein (Multicast)
+%% ï¿½ffnet ein UDP-Socket mit MultiIP + Port und trï¿½gt IP in MultiIP ein (Multicast)
 get_socket(receiver,Port,IP,MultIP)->
-    {ok,Socket} = gen_udp:open(Port, [binary, {active, false}, {reuseaddr, true}, {multicast_if, IP}, inet, {multicast_loop, false}, {add_membership, {MultIP,IP}}]),
+    {ok,Socket} = gen_udp:open(Port, [binary, {active, false}, {reuseaddr, true}, {multicast_if, MultIP}, inet, {multicast_loop, true}, {multicast_ttl, 1} , {add_membership, {MultIP,IP}}]),
     Socket.
 
-%% Wählt aus einer Liste von Zeitslots einen zufälligen Slot aus
+%% Wï¿½hlt aus einer Liste von Zeitslots einen zufï¿½lligen Slot aus
 randomElem(List) -> 
 	lists:nth(random:uniform(length(List)), List).
 
-%% Gibt das Byte an Stelle 'Index' im Datapackage zurück
+%% Gibt das Byte an Stelle 'Index' im Datapackage zurï¿½ck
 getElemFromDatapackage(Index,Datapackage) ->
 	getElemFromDatapackage(Index, Index, Datapackage).
 
-%% Gibt die Bytes von IndexStart bis IndexEnde im Datapackage zurück
+%% Gibt die Bytes von IndexStart bis IndexEnde im Datapackage zurï¿½ck
 getElemFromDatapackage(IndexStart, IndexEnd, Datapackage) ->
 	lists:sublist(Datapackage,IndexStart+1,(IndexEnd+1)-(IndexStart)).
